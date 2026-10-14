@@ -1,0 +1,88 @@
+
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from scipy.sparse import coo_matrix
+from implicit.als import AlternatingLeastSquares
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MODEL_DIR = PROJECT_ROOT / "data" / "processed" / "models"
+MODEL_PATH = MODEL_DIR / "als_model.npz"
+
+
+def train_als(ratings_df: pd.DataFrame) -> dict:
+    """Train an implicit ALS model using ratings >= 4 as positive feedback."""
+
+    required_columns = {"user_id", "movie_id", "rating"}
+    missing = required_columns - set(ratings_df.columns)
+
+    if missing:
+        raise ValueError(f"Missing columns: {sorted(missing)}")
+
+    ratings_df = ratings_df[
+        ["user_id", "movie_id", "rating"]
+    ].dropna().copy()
+
+    if ratings_df.empty:
+        raise ValueError("The ratings dataset is empty.")
+
+    # Keep positive interactions only.
+    positive = ratings_df[ratings_df["rating"] >= 4].copy()
+
+    if positive.empty:
+        raise ValueError("No positive interactions (rating >= 4).")
+
+    # Map database IDs to consecutive matrix indices.
+    user_ids = np.sort(ratings_df["user_id"].unique())
+    movie_ids = np.sort(ratings_df["movie_id"].unique())
+
+    user_to_idx = {user_id: i for i, user_id in enumerate(user_ids)}
+    movie_to_idx = {movie_id: i for i, movie_id in enumerate(movie_ids)}
+
+    rows = positive["user_id"].map(user_to_idx).to_numpy()
+    cols = positive["movie_id"].map(movie_to_idx).to_numpy()
+
+    # Ratings of 4 or 5 become confidence weights.
+    values = positive["rating"].astype(np.float32).to_numpy()
+
+    user_items = coo_matrix(
+        (values, (rows, cols)),
+        shape=(len(user_ids), len(movie_ids)),
+        dtype=np.float32,
+    ).tocsr()
+
+    model = AlternatingLeastSquares(
+        factors=64,
+        regularization=0.1,
+        iterations=20,
+        random_state=42,
+    )
+
+    print("Training ALS model...")
+    model.fit(user_items, show_progress=True)
+
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Save factors and ID mappings for later recommendations.
+    np.savez_compressed(
+        MODEL_PATH,
+        user_factors=model.user_factors,
+        item_factors=model.item_factors,
+        user_ids=user_ids,
+        movie_ids=movie_ids,
+    )
+
+    metrics = {
+        "users": int(len(user_ids)),
+        "movies": int(len(movie_ids)),
+        "positive_interactions": int(len(positive)),
+        "model_path": str(MODEL_PATH),
+    }
+
+    print("\nALS training completed!")
+    for name, value in metrics.items():
+        print(f"{name}: {value}")
+
+    return metrics
