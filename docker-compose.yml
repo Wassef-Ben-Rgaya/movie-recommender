@@ -39,5 +39,37 @@ services:
       db:
         condition: service_healthy
 
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.17.1
+    container_name: movie-recommender-mlflow
+    restart: unless-stopped
+    entrypoint: ["mlflow"]
+    command:
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - sqlite:////mlflow/mlflow.db
+      - --artifacts-destination
+      - /mlartifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+      - mlflow_artifacts:/mlartifacts
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   movie_recommender_pgdata:
+  mlflow_data:
+  mlflow_artifacts:
