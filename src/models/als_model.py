@@ -1,6 +1,6 @@
-
 from pathlib import Path
 
+import mlflow
 import numpy as np
 import pandas as pd
 from scipy.sparse import coo_matrix
@@ -11,9 +11,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = PROJECT_ROOT / "data" / "processed" / "models"
 MODEL_PATH = MODEL_DIR / "als_model.npz"
 
+MLFLOW_TRACKING_URI = "http://localhost:5000"
+MLFLOW_EXPERIMENT_NAME = "movie-recommender"
+
 
 def train_als(ratings_df: pd.DataFrame) -> dict:
-    """Train an implicit ALS model using ratings >= 4 as positive feedback."""
+    """Train an implicit ALS model and track the run in MLflow."""
 
     required_columns = {"user_id", "movie_id", "rating"}
     missing = required_columns - set(ratings_df.columns)
@@ -53,33 +56,70 @@ def train_als(ratings_df: pd.DataFrame) -> dict:
         dtype=np.float32,
     ).tocsr()
 
-    model = AlternatingLeastSquares(
-        factors=64,
-        regularization=0.1,
-        iterations=20,
-        random_state=42,
-    )
+    factors = 64
+    regularization = 0.1
+    iterations = 20
+    random_state = 42
 
-    print("Training ALS model...")
-    model.fit(user_items, show_progress=True)
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
 
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    with mlflow.start_run(run_name="ALS"):
+        mlflow.log_params(
+            {
+                "model_type": "AlternatingLeastSquares",
+                "factors": factors,
+                "regularization": regularization,
+                "iterations": iterations,
+                "random_state": random_state,
+                "positive_rating_threshold": 4,
+                "total_ratings": len(ratings_df),
+            }
+        )
 
-    # Save factors and ID mappings for later recommendations.
-    np.savez_compressed(
-        MODEL_PATH,
-        user_factors=model.user_factors,
-        item_factors=model.item_factors,
-        user_ids=user_ids,
-        movie_ids=movie_ids,
-    )
+        model = AlternatingLeastSquares(
+            factors=factors,
+            regularization=regularization,
+            iterations=iterations,
+            random_state=random_state,
+        )
 
-    metrics = {
-        "users": int(len(user_ids)),
-        "movies": int(len(movie_ids)),
-        "positive_interactions": int(len(positive)),
-        "model_path": str(MODEL_PATH),
-    }
+        print("Training ALS model...")
+        model.fit(user_items, show_progress=True)
+
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Preserve the existing local model format.
+        np.savez_compressed(
+            MODEL_PATH,
+            user_factors=model.user_factors,
+            item_factors=model.item_factors,
+            user_ids=user_ids,
+            movie_ids=movie_ids,
+        )
+
+        metrics = {
+            "users": int(len(user_ids)),
+            "movies": int(len(movie_ids)),
+            "positive_interactions": int(len(positive)),
+            "total_ratings": int(len(ratings_df)),
+            "positive_interaction_ratio": float(
+                len(positive) / len(ratings_df)
+            ),
+        }
+
+        mlflow.log_metrics(metrics)
+        mlflow.log_artifact(str(MODEL_PATH), artifact_path="model_files")
+
+        mlflow.set_tags(
+            {
+                "model_type": "ALS",
+                "feedback_type": "implicit",
+                "positive_rating_threshold": "4",
+            }
+        )
+
+    metrics["model_path"] = str(MODEL_PATH)
 
     print("\nALS training completed!")
     for name, value in metrics.items():
