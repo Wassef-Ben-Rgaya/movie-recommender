@@ -1,3 +1,4 @@
+﻿import os
 from pathlib import Path
 
 import mlflow
@@ -11,7 +12,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = PROJECT_ROOT / "data" / "processed" / "models"
 MODEL_PATH = MODEL_DIR / "als_model.npz"
 
-MLFLOW_TRACKING_URI = "http://localhost:5000"
+
+MLFLOW_TRACKING_URI = os.getenv(
+    "MLFLOW_TRACKING_URI",
+    "http://localhost:5000",
+)
+
 MLFLOW_EXPERIMENT_NAME = "movie-recommender"
 
 
@@ -126,3 +132,4 @@ def train_als(ratings_df: pd.DataFrame) -> dict:
         print(f"{name}: {value}")
 
     return metrics
+

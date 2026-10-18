@@ -1,4 +1,4 @@
-
+﻿
 services:
   db:
     image: postgres:16
@@ -29,14 +29,35 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
+      POSTGRES_PORT: "5432"
       POSTGRES_DB: ${POSTGRES_DB:-movie_recommender_db}
       POSTGRES_USER: ${POSTGRES_USER:-movie_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD in .env}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      RECOMMENDATIONS_CACHE_TTL: "300"
+      PYTHONPATH: /app
+      PYTHONUNBUFFERED: "1"
     ports:
       - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./data/processed/models:/app/data/processed/models
+    command:
+      - uvicorn
+      - src.api.app:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
     depends_on:
       db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   mlflow:
@@ -50,6 +71,8 @@ services:
       - 0.0.0.0
       - --port
       - "5000"
+      - --allowed-hosts
+      - "mlflow:5000,localhost:5000,127.0.0.1:5000"
       - --backend-store-uri
       - sqlite:////mlflow/mlflow.db
       - --artifacts-destination
@@ -69,7 +92,151 @@ services:
       timeout: 5s
       retries: 10
 
+  kafka:
+    image: apache/kafka:3.9.1
+    container_name: movie-recommender-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "29092:29092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test:
+        - CMD
+        - /opt/kafka/bin/kafka-topics.sh
+        - --bootstrap-server
+        - localhost:9092
+        - --list
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: movie-recommender-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  airflow-db:
+    image: postgres:16
+    container_name: movie-recommender-airflow-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow_dev_password
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  airflow-init:
+    image: movie-recommender-airflow:latest
+    container_name: movie-recommender-airflow-init
+    restart: "no"
+    environment: &airflow-environment
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg://airflow:airflow_dev_password@airflow-db/airflow
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__API__SECRET_KEY: movie-recommender-dev-api-secret
+      AIRFLOW__API_AUTH__JWT_SECRET: movie-recommender-dev-jwt-secret
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-movie_recommender_db}
+      POSTGRES_USER: ${POSTGRES_USER:-movie_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD in .env}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      PYTHONPATH: /opt/airflow/project
+    volumes: &airflow-volumes
+      - ./airflow/dags:/opt/airflow/dags
+      - ./src:/opt/airflow/project/src
+      - ./data/processed/models:/opt/airflow/project/data/processed/models
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    command: db migrate
+
+  airflow-api-server:
+    image: movie-recommender-airflow:latest
+    container_name: movie-recommender-airflow-api
+    restart: unless-stopped
+    environment: *airflow-environment
+    volumes: *airflow-volumes
+    command: api-server
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      airflow-db:
+        condition: service_healthy
+
+  airflow-scheduler:
+    image: movie-recommender-airflow:latest
+    container_name: movie-recommender-airflow-scheduler
+    restart: unless-stopped
+    environment: *airflow-environment
+    volumes: *airflow-volumes
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      airflow-db:
+        condition: service_healthy
+    command: scheduler
+
+  airflow-dag-processor:
+    image: movie-recommender-airflow:latest
+    container_name: movie-recommender-airflow-dag-processor
+    restart: unless-stopped
+    environment: *airflow-environment
+    volumes: *airflow-volumes
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      airflow-db:
+        condition: service_healthy
+    command: dag-processor
+
 volumes:
   movie_recommender_pgdata:
   mlflow_data:
   mlflow_artifacts:
+  airflow_pgdata:
+  kafka_data:
+  redis_data:

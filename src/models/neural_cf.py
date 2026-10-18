@@ -1,3 +1,4 @@
+import os
 
 from pathlib import Path
 
@@ -14,7 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = PROJECT_ROOT / "data" / "processed" / "models"
 MODEL_PATH = MODEL_DIR / "neural_cf.pt"
 
-MLFLOW_TRACKING_URI = "http://localhost:5000"
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 MLFLOW_EXPERIMENT_NAME = "movie-recommender"
 
 DEVICE = torch.device("cpu")

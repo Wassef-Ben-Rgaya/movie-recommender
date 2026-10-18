@@ -18,5 +18,6 @@ pydantic
 streamlit
 pytest
 httpx
-
 mlflow==3.17.1
+kafka-python
+redis
