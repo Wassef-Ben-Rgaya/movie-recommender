@@ -9,3 +9,12 @@ data/processed/*
 mlruns/
 .pytest_cache/
 .coverage
+
+# Local Streamlit agent skills
+.agents/
+.claude/
+
+# Local backup files
+*.bak
+*.backup
+*consumer_before_idempotency.py
