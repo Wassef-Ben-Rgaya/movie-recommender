@@ -1,4 +1,4 @@
-﻿
+
 services:
   db:
     image: postgres:16
@@ -151,7 +151,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow_dev_password
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:?Define AIRFLOW_DB_PASSWORD in .env}
       POSTGRES_DB: airflow
     volumes:
       - airflow_pgdata:/var/lib/postgresql/data
@@ -167,11 +167,11 @@ services:
     restart: "no"
     environment: &airflow-environment
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg://airflow:airflow_dev_password@airflow-db/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg://airflow:${AIRFLOW_DB_PASSWORD:?Define AIRFLOW_DB_PASSWORD in .env}@airflow-db/airflow
       AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__API__SECRET_KEY: movie-recommender-dev-api-secret
-      AIRFLOW__API_AUTH__JWT_SECRET: movie-recommender-dev-jwt-secret
+      AIRFLOW__API__SECRET_KEY: ${AIRFLOW_API_SECRET_KEY:?Define AIRFLOW_API_SECRET_KEY in .env}
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?Define AIRFLOW_JWT_SECRET in .env}
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"

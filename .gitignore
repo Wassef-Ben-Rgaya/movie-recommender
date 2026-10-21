@@ -18,3 +18,18 @@ mlruns/
 *.bak
 *.backup
 *consumer_before_idempotency.py
+
+# AWS deployment artifacts
+aws/package/
+aws/svd_lambda_package/
+aws/*.zip
+aws/lambda_test_response.json
+
+# Local dashboard backups
+src/dashboard/app_backup.py
+src/dashboard/app.py.utf8-backup
+
+# Python and tooling caches
+**/__pycache__/
+.mypy_cache/
+.ruff_cache/

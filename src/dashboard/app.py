@@ -1,174 +1,364 @@
+
 import requests
 import pandas as pd
 import streamlit as st
+import plotly.express as px
 
-API_URL = "http://localhost:8000"
+# ============================================================
+# CONFIGURATION
+# ============================================================
 
 st.set_page_config(
-    page_title="Movie Recommender | ML Studio",
+    page_title="Movie ML Studio",
     page_icon="🎬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# Previously measured evaluation results from this project.
-# ALS remains unevaluated here until a comparable test result is available.
+API_URL = (
+    "https://ebayw333oc.execute-api.eu-north-1.amazonaws.com/default"
+)
+
+API_TIMEOUT = 30
+
+# Previously recorded evaluation metrics.
+# These values are not recalculated live by this dashboard.
 MODEL_RESULTS = {
-    "SVD": {"RMSE": 0.9365, "MAE": 0.7358},
-    "Neural CF": {"RMSE": 0.9436, "MAE": 0.7521},
+    "SVD": {
+        "RMSE": 0.9365,
+        "MAE": 0.7358,
+    },
+    "Neural CF": {
+        "RMSE": 0.9436,
+        "MAE": 0.7521,
+    },
 }
 
-st.markdown("""
-<style>
-.stApp {
-    background: #0b0e19;
-    color: #f2f3fa;
-}
-[data-testid="stSidebar"] {
-    background: #111629;
-    border-right: 1px solid #252b43;
-}
-.block-container {
-    max-width: 1450px;
-    padding-top: 2rem;
-    padding-bottom: 3rem;
-}
-.hero {
-    padding: 28px;
-    border-radius: 20px;
-    background: linear-gradient(120deg, #191f3a, #30204b 70%, #171a30);
-    border: 1px solid #383354;
-    margin-bottom: 24px;
-}
-.hero-label {
-    color: #b9a8ff;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 2px;
-}
-.hero h1 {
-    color: #ffffff;
-    font-size: 38px;
-    margin: 8px 0;
-}
-.hero p {
-    color: #c4c8dc;
-    margin-bottom: 0;
-}
-.metric-card {
-    background: #141a2b;
-    border: 1px solid #292f49;
-    padding: 18px;
-    border-radius: 15px;
-    min-height: 105px;
-}
-.metric-label {
-    color: #aab1ca;
-    font-size: 13px;
-}
-.metric-value {
-    color: #ffffff;
-    font-size: 29px;
-    font-weight: 750;
-    margin-top: 6px;
-}
-.movie-card {
-    background: linear-gradient(145deg, #171d31, #121625);
-    border: 1px solid #303650;
-    border-radius: 16px;
-    padding: 18px;
-    margin-bottom: 12px;
-    min-height: 142px;
-}
-.movie-rank {
-    color: #b8a5ff;
-    font-size: 12px;
-    letter-spacing: 1px;
-    font-weight: 700;
-}
-.movie-title {
-    color: #ffffff;
-    font-size: 17px;
-    font-weight: 650;
-    margin: 12px 0;
-}
-.movie-rating {
-    color: #f4d58b;
-    font-size: 16px;
-    font-weight: 700;
-}
-.section-title {
-    color: #ffffff;
-    font-size: 23px;
-    font-weight: 700;
-    margin-top: 12px;
-}
-.small-muted {
-    color: #aab1ca;
-    font-size: 13px;
-}
-div[data-testid="stMetric"] {
-    background: #141a2b;
-    border: 1px solid #292f49;
-    padding: 14px;
-    border-radius: 14px;
-}
-div[data-testid="stMetricLabel"] {
-    color: #aab1ca;
-}
-div[data-testid="stMetricValue"] {
-    color: #ffffff;
-}
-.stButton button[kind="primary"] {
-    background: #7961e8;
-    border: 0;
-    border-radius: 10px;
-    color: white;
-    font-weight: 650;
-}
-hr {
-    border-color: #292f49;
-}
-</style>
-""", unsafe_allow_html=True)
+# ============================================================
+# STYLING
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-color: #0e1117;
+    }
+
+    [data-testid="stSidebar"] {
+        background-color: #151a24;
+        border-right: 1px solid #283044;
+    }
+
+    .main-title {
+        font-size: 2.7rem;
+        font-weight: 800;
+        letter-spacing: -1px;
+        margin-bottom: 0.25rem;
+    }
+
+    .section-title {
+        font-size: 1.45rem;
+        font-weight: 700;
+        margin-top: 1rem;
+        margin-bottom: 0.3rem;
+    }
+
+    .eyebrow {
+        color: #75a7ff;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+    }
+
+    .subtitle {
+        color: #a9b2c5;
+        font-size: 1.05rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .movie-card {
+        background: #171e2b;
+        border: 1px solid #2b3548;
+        border-radius: 12px;
+        padding: 18px;
+        margin-bottom: 12px;
+    }
+
+    .movie-rank {
+        color: #82aaff;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 1px;
+    }
+
+    .movie-title {
+        color: #f1f5fb;
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin-top: 8px;
+        margin-bottom: 8px;
+    }
+
+    .movie-rating {
+        color: #f5c76b;
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    .small-muted {
+        color: #a9b2c5;
+        font-size: 0.85rem;
+    }
+
+    div[data-testid="stMetric"] {
+        background: #171e2b;
+        border: 1px solid #2b3548;
+        padding: 16px;
+        border-radius: 12px;
+    }
+
+    div[data-testid="stMetricLabel"] {
+        color: #a9b2c5;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ============================================================
+# GENERAL HELPERS
+# ============================================================
+
+def get_field(item, candidates, default=None):
+    """Return the first available field from a dictionary."""
+    if not isinstance(item, dict):
+        return default
+
+    for key in candidates:
+        if key in item and item[key] is not None:
+            return item[key]
+
+    return default
 
 
-def metric_card(label, value):
+def normalize_recommendations(payload):
+    """Normalize common recommendation API response formats."""
+    if isinstance(payload, list):
+        items = payload
+    elif isinstance(payload, dict):
+        items = payload.get("recommendations", [])
+    else:
+        items = []
+
+    if not isinstance(items, list):
+        return []
+
+    normalized = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        movie_id = get_field(
+            item,
+            ["movie_id", "movieId", "id", "item_id"],
+            default=None,
+        )
+
+        title = get_field(
+            item,
+            ["title", "movie_title", "movie", "name"],
+            default="Unknown movie",
+        )
+
+        rating = get_field(
+            item,
+            [
+                "predicted_rating",
+                "predicted_rating_score",
+                "estimated_rating",
+                "rating",
+                "score",
+                "prediction",
+            ],
+            default=None,
+        )
+
+        try:
+            rating = float(rating) if rating is not None else None
+        except (TypeError, ValueError):
+            rating = None
+
+        try:
+            movie_id = int(movie_id) if movie_id is not None else None
+        except (TypeError, ValueError):
+            pass
+
+        normalized.append(
+            {
+                "movie_id": movie_id,
+                "title": str(title),
+                "rating": rating,
+            }
+        )
+
+    return normalized
+
+
+def fetch_recommendations(user_id, number_of_movies):
+    """Call the deployed AWS API and return recommendations."""
+    endpoint = f"{API_URL}/recommendations/{int(user_id)}"
+
+    try:
+        response = requests.get(
+            endpoint,
+            params={"n": int(number_of_movies)},
+            timeout=API_TIMEOUT,
+        )
+
+        if response.status_code == 404:
+            return None, "User not found in the recommendation dataset."
+
+        if response.status_code == 400:
+            return None, "Invalid request. Check the user ID and movie count."
+
+        response.raise_for_status()
+
+        payload = response.json()
+        recommendations = normalize_recommendations(payload)
+
+        return {
+            "payload": payload,
+            "recommendations": recommendations,
+        }, None
+
+    except requests.Timeout:
+        return None, "The AWS API request timed out. Please try again."
+
+    except requests.RequestException as exc:
+        return None, f"Unable to reach the AWS API: {exc}"
+
+    except ValueError:
+        return None, "The AWS API returned an invalid JSON response."
+
+
+def check_api_status():
+    """Check API availability using a real recommendation request."""
+    try:
+        response = requests.get(
+            f"{API_URL}/recommendations/1",
+            params={"n": 1},
+            timeout=10,
+        )
+        return response.ok, (
+            "AWS API is responding successfully"
+            if response.ok
+            else f"API returned HTTP {response.status_code}"
+        )
+
+    except requests.RequestException:
+        return False, "Unable to reach AWS API"
+
+
+def render_movie_cards(recommendations):
+    """Render recommendations as individual movie cards."""
+    if not recommendations:
+        st.warning(
+            "No recommendations were returned. "
+            "Check the API response below."
+        )
+        return
+
+    for rank, movie in enumerate(recommendations, start=1):
+        movie_id = movie["movie_id"]
+        title = movie["title"]
+        rating = movie["rating"]
+
+        id_text = (
+            f"MOVIE ID {movie_id}"
+            if movie_id is not None
+            else "MOVIE ID unavailable"
+        )
+
+        rating_text = (
+            f"{rating:.2f} / 5"
+            if rating is not None
+            else "Predicted rating unavailable"
+        )
+
+        st.markdown(
+            f"""
+            <div class="movie-card">
+                <div class="movie-rank">
+                    TOP #{rank} &nbsp; | &nbsp; {id_text}
+                </div>
+                <div class="movie-title">
+                    {title}
+                </div>
+                <div class="movie-rating">
+                    Rating: {rating_text}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_header():
     st.markdown(
-        f'<div class="metric-card">'
-        f'<div class="metric-label">{label}</div>'
-        f'<div class="metric-value">{value}</div>'
-        f'</div>',
+        '<div class="eyebrow">'
+        'PERSONALIZED DISCOVERY | MACHINE LEARNING'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<div class="main-title">Movie Recommender</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<div class="subtitle">'
+        'Discover your next favorite film with personalized '
+        'recommendations powered by collaborative filtering.'
+        '</div>',
         unsafe_allow_html=True,
     )
 
 
-def get_title(movie):
-    return str(movie.get("title", f"Movie {movie.get('movie_id', '?')}"))
+def render_footer():
+    st.divider()
+    st.caption(
+        "MOVIE RECOMMENDER | ML ENGINEERING PROJECT | "
+        "SVD | ALS | NEURAL COLLABORATIVE FILTERING"
+    )
 
 
-def get_rating(movie):
-    value = movie.get("predicted_rating")
-    try:
-        return float(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
+# ============================================================
+# SIDEBAR
+# ============================================================
 
-
-# Sidebar
 with st.sidebar:
-    st.markdown("## 🎬 ML Studio")
+    st.markdown("## 🎬 Movie ML Studio")
     st.caption("MOVIE DISCOVERY PLATFORM")
     st.divider()
 
     page = st.radio(
         "NAVIGATION",
-        ["Discover Movies", "Model Analytics", "System Status"],
+        [
+            "Discover Movies",
+            "Model Analytics",
+            "System Status",
+        ],
         label_visibility="visible",
     )
 
     st.divider()
     st.markdown("#### Recommendation settings")
+
     user_id = st.number_input(
         "User ID",
         min_value=1,
@@ -176,191 +366,263 @@ with st.sidebar:
         value=1,
         step=1,
     )
+
     recommendation_count = st.slider(
         "Number of movies",
         min_value=5,
         max_value=20,
         value=10,
-        step=5,
+        step=1,
     )
 
-    fetch_clicked = st.button(
-        "✨ Generate recommendations",
-        type="primary",
-        use_container_width=True,
-    )
-
-    if fetch_clicked:
-        try:
-            response = requests.get(
-                f"{API_URL}/recommendations/{int(user_id)}",
-                params={"n": recommendation_count},
-                timeout=30,
-            )
-            response.raise_for_status()
-            st.session_state["movie_payload"] = response.json()
-            st.session_state["movie_payload_user"] = int(user_id)
-            st.session_state["movie_payload_error"] = None
-        except requests.RequestException as exc:
-            st.session_state["movie_payload_error"] = str(exc)
-
-    st.divider()
-    st.caption("Powered by FastAPI · PostgreSQL · Redis")
+    st.caption("Powered by AWS Lambda | API Gateway | S3")
 
 
-# Header
-st.markdown("""
-<div class="hero">
-    <div class="hero-label">PERSONALIZED DISCOVERY · MACHINE LEARNING</div>
-    <h1>Movie Recommender</h1>
-    <p>Discover your next favorite film with personalized recommendations
-    powered by collaborative filtering.</p>
-</div>
-""", unsafe_allow_html=True)
+# ============================================================
+# HEADER AND SUMMARY METRICS
+# ============================================================
 
-# Dataset overview
-overview = st.columns(4)
-with overview[0]:
-    metric_card("REGISTERED USERS", "943")
-with overview[1]:
-    metric_card("MOVIES", "1,682")
-with overview[2]:
-    metric_card("USER RATINGS", "100,000")
-with overview[3]:
-    metric_card("ML MODELS", "3")
+render_header()
 
-st.write("")
+metric_columns = st.columns(4)
 
-# API health indicator
-api_online = False
-api_message = "API is unreachable"
-try:
-    health = requests.get(f"{API_URL}/health", timeout=3)
-    api_online = health.ok
-    api_message = "API online" if health.ok else f"HTTP {health.status_code}"
-except requests.RequestException:
-    pass
+metric_columns[0].metric("REGISTERED USERS", "943")
+metric_columns[1].metric("MOVIES", "1,682")
+metric_columns[2].metric("USER RATINGS", "100,000")
+metric_columns[3].metric("ML MODELS", "3")
+
+st.divider()
+
+
+# ============================================================
+# PAGE 1: DISCOVER MOVIES
+# ============================================================
 
 if page == "Discover Movies":
+
     st.markdown(
-        '<div class="section-title">🍿 Your recommendations</div>',
+        '<div class="section-title">Your recommendations</div>',
         unsafe_allow_html=True,
     )
+
     st.caption(
-        f"Recommendations for user {int(user_id)} · "
-        "Sorted by predicted rating"
+        f"Personalized recommendations for user {int(user_id)}."
     )
 
-    error = st.session_state.get("movie_payload_error")
-    payload = st.session_state.get("movie_payload")
-    payload_user = st.session_state.get("movie_payload_user")
+    if st.button(
+        "Generate recommendations",
+        type="primary",
+        use_container_width=True,
+    ):
+        with st.spinner("Requesting recommendations from AWS..."):
+            result, error = fetch_recommendations(
+                user_id,
+                recommendation_count,
+            )
 
-    if error:
-        st.error(f"Could not contact the recommendation API: {error}")
-        st.info("Check that FastAPI is running on port 8000.")
-    elif payload and payload_user == int(user_id):
-        movies = payload.get("recommendations", [])
-        source = payload.get("source", "unknown")
-
-        summary = st.columns(3)
-        summary[0].metric("Selected user", int(user_id))
-        summary[1].metric("Movies returned", len(movies))
-        summary[2].metric("Recommendation source", str(source).upper())
-
-        if not movies:
-            st.info("The API returned no recommendations.")
+        if error:
+            st.session_state.pop("movie_payload", None)
+            st.session_state.pop("movie_user_id", None)
+            st.error(error)
         else:
-            for start in range(0, len(movies), 2):
-                cols = st.columns(2)
-                for offset, col in enumerate(cols):
-                    index = start + offset
-                    if index >= len(movies):
-                        continue
+            st.session_state["movie_payload"] = result["payload"]
+            st.session_state["movie_recommendations"] = (
+                result["recommendations"]
+            )
+            st.session_state["movie_user_id"] = int(user_id)
+            st.session_state["movie_count"] = recommendation_count
 
-                    movie = movies[index]
-                    title = get_title(movie)
-                    rating = get_rating(movie)
-                    rating_text = (
-                        f"★ {rating:.2f} / 5"
-                        if rating is not None
-                        else "Rating unavailable"
-                    )
-                    movie_id = movie.get("movie_id", "N/A")
+    saved_payload = st.session_state.get("movie_payload")
+    saved_user_id = st.session_state.get("movie_user_id")
 
-                    with col:
-                        st.markdown(
-                            f'<div class="movie-card">'
-                            f'<div class="movie-rank">TOP #{index + 1}'
-                            f' &nbsp; · &nbsp; MOVIE ID {movie_id}</div>'
-                            f'<div class="movie-title">{title}</div>'
-                            f'<div class="movie-rating">{rating_text}</div>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
+    if saved_payload is not None and saved_user_id == int(user_id):
+        recommendations = st.session_state.get(
+            "movie_recommendations",
+            [],
+        )
+
+        info_columns = st.columns(3)
+
+        info_columns[0].metric(
+            "Selected user",
+            str(saved_user_id),
+        )
+
+        info_columns[1].metric(
+            "Movies returned",
+            str(len(recommendations)),
+        )
+
+        info_columns[2].metric(
+            "Recommendation source",
+            str(
+                saved_payload.get("source", "SVD")
+                if isinstance(saved_payload, dict)
+                else "SVD"
+            ),
+        )
+
+        render_movie_cards(recommendations)
 
         with st.expander("View raw API response"):
-            st.json(payload)
+            st.json(saved_payload)
+
     else:
         st.info(
-            "Choose a user and click **Generate recommendations** "
-            "in the sidebar to discover movies."
+            "Choose a user and the number of movies, "
+            "then click Generate recommendations."
         )
 
     st.divider()
-    st.markdown("#### How it works")
+
+    st.markdown("### How it works")
+
     info = st.columns(3)
-    info[0].markdown("**01 · User profile**\n\nSelect a MovieLens user.")
-    info[1].markdown("**02 · Recommendation engine**\n\nFastAPI retrieves personalized predictions.")
-    info[2].markdown("**03 · Ranked results**\n\nExplore movies ordered by predicted rating.")
+
+    info[0].markdown(
+        "**01 | User profile**\n\n"
+        "Select a MovieLens user."
+    )
+
+    info[1].markdown(
+        "**02 | Recommendation engine**\n\n"
+        "AWS Lambda runs the SVD model to generate "
+        "personalized predictions."
+    )
+
+    info[2].markdown(
+        "**03 | Ranked results**\n\n"
+        "Explore movies ordered by predicted rating."
+    )
+
+
+# ============================================================
+# PAGE 2: MODEL ANALYTICS
+# ============================================================
 
 elif page == "Model Analytics":
+
     st.markdown(
-        '<div class="section-title">📊 Model performance</div>',
+        '<div class="section-title">Model performance</div>',
         unsafe_allow_html=True,
     )
+
     st.caption(
         "Previously measured held-out evaluation results. "
         "Lower RMSE and MAE indicate smaller prediction errors."
     )
 
-    results_df = pd.DataFrame(MODEL_RESULTS).T
+    results_df = pd.DataFrame.from_dict(
+        MODEL_RESULTS,
+        orient="index",
+    )
+
     results_df.index.name = "Model"
     results_df = results_df.reset_index()
 
+    # RMSE and MAE comparison charts
     left, right = st.columns(2)
+
     with left:
         st.markdown("#### RMSE comparison")
-        st.bar_chart(results_df.set_index("Model")[["RMSE"]])
+
+        rmse_fig = px.bar(
+            results_df,
+            x="Model",
+            y="RMSE",
+            color="Model",
+            text="RMSE",
+            title="Root Mean Squared Error",
+        )
+
+        rmse_fig.update_traces(
+            texttemplate="%{text:.4f}",
+            textposition="outside",
+            cliponaxis=False,
+        )
+
+        rmse_fig.update_layout(
+            showlegend=False,
+            yaxis_title="RMSE (lower is better)",
+            xaxis_title="",
+            margin=dict(l=10, r=10, t=60, b=10),
+        )
+
+        st.plotly_chart(
+            rmse_fig,
+            use_container_width=True,
+        )
+
     with right:
         st.markdown("#### MAE comparison")
-        st.bar_chart(results_df.set_index("Model")[["MAE"]])
 
+        mae_fig = px.bar(
+            results_df,
+            x="Model",
+            y="MAE",
+            color="Model",
+            text="MAE",
+            title="Mean Absolute Error",
+        )
+
+        mae_fig.update_traces(
+            texttemplate="%{text:.4f}",
+            textposition="outside",
+            cliponaxis=False,
+        )
+
+        mae_fig.update_layout(
+            showlegend=False,
+            yaxis_title="MAE (lower is better)",
+            xaxis_title="",
+            margin=dict(l=10, r=10, t=60, b=10),
+        )
+
+        st.plotly_chart(
+            mae_fig,
+            use_container_width=True,
+        )
+
+    # Evaluation results table
     st.markdown("#### Evaluation results")
+
     st.dataframe(
         results_df,
         use_container_width=True,
         hide_index=True,
     )
 
+    # Model registry
     st.markdown("#### Model registry")
-    registry = pd.DataFrame([
-        {
-            "Model": "SVD",
-            "Artifact": "svd_model.pkl",
-            "Evaluation": "Available",
-        },
-        {
-            "Model": "ALS",
-            "Artifact": "als_model.npz",
-            "Evaluation": "Not shown — comparable test metrics not verified",
-        },
-        {
-            "Model": "Neural CF",
-            "Artifact": "neural_cf.pt",
-            "Evaluation": "Available",
-        },
-    ])
-    st.dataframe(registry, use_container_width=True, hide_index=True)
+
+    registry = pd.DataFrame(
+        [
+            {
+                "Model": "SVD",
+                "Artifact": "svd_model.pkl",
+                "Evaluation": "Previously evaluated",
+            },
+            {
+                "Model": "ALS",
+                "Artifact": "als_model.npz",
+                "Evaluation": (
+                    "Artifact available; comparable test metrics "
+                    "not verified"
+                ),
+            },
+            {
+                "Model": "Neural CF",
+                "Artifact": "neural_cf.pt",
+                "Evaluation": "Previously evaluated",
+            },
+        ]
+    )
+
+    st.dataframe(
+        registry,
+        use_container_width=True,
+        hide_index=True,
+    )
 
     st.caption(
         "SVD: RMSE 0.9365, MAE 0.7358. "
@@ -368,38 +630,105 @@ elif page == "Model Analytics":
         "These are previously recorded results, not a live evaluation."
     )
 
+
+# ============================================================
+# PAGE 3: SYSTEM STATUS
+# ============================================================
+
 elif page == "System Status":
+
     st.markdown(
-        '<div class="section-title">🛠️ System status</div>',
+        '<div class="section-title">System status</div>',
         unsafe_allow_html=True,
     )
 
-    status_col, url_col = st.columns(2)
-    with status_col:
-        st.markdown("#### FastAPI")
-        if api_online:
-            st.success("Healthy — /health responded successfully")
-        else:
-            st.error(api_message)
+    with st.spinner("Checking AWS API availability..."):
+        api_online, api_message = check_api_status()
 
-    with url_col:
-        st.markdown("#### API endpoint")
-        st.code(f"{API_URL}/recommendations/{{user_id}}?n=10")
+    st.markdown("#### AWS Lambda API")
+
+    if api_online:
+        st.success(api_message)
+    else:
+        st.error(api_message)
+
+    st.markdown("#### API endpoint")
+
+    st.code(
+        f"{API_URL}/recommendations/{{user_id}}?n=10",
+        language="text",
+    )
 
     st.markdown("#### Project architecture")
-    st.markdown("""
-    `MovieLens 100K` → `PostgreSQL` → `SVD / ALS / Neural CF`
 
-    `FastAPI` → `Redis cache` → `Streamlit dashboard`
+    st.markdown(
+        """
+        **Data and model training**
 
-    `Airflow` and `MLflow` support the training and experiment workflow.
-    """)
+        `MovieLens 100K` → `PostgreSQL` → `SVD / ALS / Neural CF`
 
-st.divider()
-st.markdown(
-    '<div class="small-muted">'
-    'MOVIE RECOMMENDER · ML ENGINEERING PROJECT · '
-    'SVD · ALS · NEURAL COLLABORATIVE FILTERING'
-    '</div>',
-    unsafe_allow_html=True,
-)
+        `Airflow` and `MLflow` support the training and experiment workflow.
+
+        **Online recommendation API**
+
+        `Streamlit dashboard` → `Amazon API Gateway` → `AWS Lambda (SVD)`
+
+        `AWS Lambda` loads the model package and retrieves movie and
+        rating data from `Amazon S3`.
+
+        **Local services**
+
+        `FastAPI` and `Redis` are available as part of the local
+        application architecture.
+        """
+    )
+
+    st.markdown("#### Deployment details")
+
+    deployment_df = pd.DataFrame(
+        [
+            {
+                "Component": "Streamlit",
+                "Role": "Interactive dashboard",
+                "Environment": "Local",
+            },
+            {
+                "Component": "Amazon API Gateway",
+                "Role": "HTTP API endpoint",
+                "Environment": "AWS",
+            },
+            {
+                "Component": "AWS Lambda",
+                "Role": "SVD inference",
+                "Environment": "AWS",
+            },
+            {
+                "Component": "Amazon S3",
+                "Role": "Model and data storage",
+                "Environment": "AWS",
+            },
+            {
+                "Component": "FastAPI / Redis",
+                "Role": "Local API and cache",
+                "Environment": "Local architecture",
+            },
+            {
+                "Component": "Airflow / MLflow",
+                "Role": "Training workflow and experiment tracking",
+                "Environment": "Project services",
+            },
+        ]
+    )
+
+    st.dataframe(
+        deployment_df,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+render_footer()
