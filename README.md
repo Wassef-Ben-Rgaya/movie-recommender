@@ -1,59 +1,76 @@
 # Movie Recommender System
 
-A movie recommendation platform built with Python, FastAPI, PostgreSQL, and machine learning. The system generates personalized movie recommendations based on user ratings and exposes them through a REST API.
+A machine learning-powered movie recommendation platform built with Python, FastAPI, PostgreSQL, and Docker. It generates personalized movie recommendations using collaborative filtering and exposes them through a REST API.
 
 ## Features
 
-- Personalized movie recommendations for individual users
-- REST API built with FastAPI
+- Personalized movie recommendations based on user ratings
+- Three recommendation approaches: SVD, ALS, and Neural Collaborative Filtering
+- REST API built with FastAPI and interactive Swagger documentation
 - PostgreSQL database for users, movies, and ratings
-- Collaborative filtering models: SVD, ALS, and Neural Collaborative Filtering
-- Docker Compose deployment for the API and database
-- Interactive API documentation with Swagger UI
+- Redis caching for recommendations
+- Kafka-based interaction streaming
+- Airflow orchestration for machine learning workflows
+- MLflow experiment tracking
+- Interactive Streamlit dashboard
+- Docker Compose environment
+- AWS Lambda, API Gateway, and S3 integration
 - Automated tests with pytest
 
 ## Tech Stack
 
 | Category | Technologies |
 |---|---|
-| Programming Language | Python |
+| Language | Python 3.12 |
 | API | FastAPI, Uvicorn |
 | Database | PostgreSQL |
-| Data Processing | pandas, NumPy |
-| Recommendation Models | Surprise SVD, ALS, Neural Collaborative Filtering |
-| Machine Learning Evaluation | RMSE, MAE |
-| Containers | Docker, Docker Compose |
+| Data processing | pandas, NumPy |
+| Recommendation models | Surprise SVD, ALS, Neural CF |
+| Evaluation | RMSE, MAE |
+| Caching | Redis |
+| Streaming | Apache Kafka |
+| Orchestration | Apache Airflow |
+| Experiment tracking | MLflow |
+| Dashboard | Streamlit |
+| Deployment | Docker, Docker Compose, AWS |
 | Testing | pytest |
-| API Documentation | Swagger UI |
 
 ## Dataset
 
-The project uses the MovieLens 100K dataset.
+This project uses the [MovieLens 100K dataset](https://grouplens.org/datasets/movielens/100k/).
 
-- **Users:** 943
-- **Movies:** 1,682
-- **Ratings:** 100,000
+- **943 users**
+- **1,682 movies**
+- **100,000 ratings**
+
+Download and extract the dataset according to the ingestion script's expected directory structure. The dataset and generated model artifacts are not included in this repository.
 
 ## Architecture
 
 ```text
-MovieLens Dataset
-       |
-       v
-Data Ingestion
-       |
-       v
-PostgreSQL Database
-       |
-       v
-Recommendation Models
-(SVD / ALS / Neural CF)
-       |
-       v
-FastAPI REST API
-       |
-       v
-Personalized Movie Recommendations
+MovieLens 100K Dataset
+          |
+          v
+    Data Ingestion
+          |
+          v
+      PostgreSQL
+          |
+          v
+  Model Training & Evaluation
+     SVD / ALS / Neural CF
+          |
+          v
+    FastAPI REST API
+       |         |
+       v         v
+     Redis    Recommendations
+       Cache      |
+                  v
+            Streamlit Dashboard
+
+Additional components:
+Airflow | MLflow | Kafka | AWS Lambda | API Gateway | S3
 ```
 
 ## Getting Started
@@ -61,48 +78,65 @@ Personalized Movie Recommendations
 ### Prerequisites
 
 - Python 3.12
-- Docker Desktop
-- Docker Compose
 - Git
+- Docker Desktop with Docker Compose
+- A `.env` configuration based on `.env.example`
 
 ### 1. Clone the repository
 
 ```bash
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+git clone https://github.com/Wassef-Ben-Rgaya/movie-recommender.git
 cd movie-recommender
 ```
 
-Replace `<YOUR_GITHUB_REPOSITORY_URL>` with the actual URL of your repository.
-
 ### 2. Configure environment variables
 
-Create a `.env` file in the project root using `.env.example` as a reference.
+Create a local `.env` file using `.env.example` as a reference.
 
-Configure the PostgreSQL database name, username, password, host, and port according to your local setup.
+On Windows PowerShell:
 
-Do not commit your `.env` file or expose database credentials.
+```powershell
+Copy-Item .env.example .env
+```
 
-### 3. Start the application
+Edit `.env` and provide appropriate values for the required database credentials and application secrets. Use unique secret values for local services.
 
-```bash
+**Never commit `.env` or publish passwords, access keys, or other secrets.**
+
+### 3. Start the services
+
+Build and start the Docker Compose environment:
+
+```powershell
 docker compose up -d --build
 ```
 
-Check the running containers:
+Check service status:
 
-```bash
+```powershell
 docker compose ps
 ```
 
-### 4. Open the API documentation
+View logs if a service fails to start:
 
-Swagger UI:
+```powershell
+docker compose logs --tail 100
+```
 
-http://localhost:8000/docs
+Some services may require the dataset, model artifacts, or additional initialization steps before all features are available. Follow the relevant project configuration and scripts.
 
-Health endpoint:
+### 4. Access the application
 
-http://localhost:8000/health
+| Service | Local URL |
+|---|---|
+| FastAPI | http://localhost:8000 |
+| Swagger UI | http://localhost:8000/docs |
+| Health check | http://localhost:8000/health |
+| Streamlit dashboard | http://localhost:8501 |
+| MLflow | http://localhost:5000 |
+| Airflow | http://localhost:8080 |
+
+Access a service only when its corresponding container is running and its port is configured in Docker Compose.
 
 ## API Usage
 
@@ -114,10 +148,11 @@ http://localhost:8000/health
 GET /recommendations/{user_id}?n=10
 ```
 
-Example:
+Example using PowerShell:
 
-```bash
-curl "http://localhost:8000/recommendations/1?n=10"
+```powershell
+Invoke-RestMethod `
+  -Uri "http://localhost:8000/recommendations/1?n=10"
 ```
 
 Example response:
@@ -141,7 +176,7 @@ Example response:
 }
 ```
 
-The response above is illustrative; the number of returned movies depends on the requested limit and available recommendations.
+This response is illustrative. The actual number and content of recommendations depend on the requested limit, available model artifacts, and the API implementation.
 
 ### Health check
 
@@ -159,37 +194,35 @@ Expected response:
 
 ## Model Evaluation
 
-The SVD model is evaluated using:
+The current SVD evaluation reports the following results:
 
-- **RMSE:** 0.9365
-- **MAE:** 0.7358
+| Metric | Result |
+|---|---:|
+| RMSE | 0.9365 |
+| MAE | 0.7358 |
 
-These metrics are preliminary results from the current evaluation script. A strictly independent evaluation should ensure that the test ratings were not used to train the saved model.
+These are preliminary results from the current evaluation workflow. For a reliable comparison, ensure that the test set is excluded from model training and compare SVD, ALS, and Neural CF using consistent data splits and evaluation metrics.
 
 ## Automated Testing
 
-Run the test suite:
+Run the test suite from the project root:
 
-```bash
-python -m pytest -v
+```powershell
+python -m pytest tests/ -v
 ```
 
-Latest verified result:
+**Latest verified result:** 10 tests passed, with one deprecation warning.
 
-```text
-10 passed, 1 warning
-```
-
-The tests cover API endpoints, recommendation responses, invalid request limits, model artifacts, and SVD prediction validity.
+The tests cover API behavior, recommendation responses, request validation, and model-related functionality.
 
 ## Project Structure
 
 ```text
 movie-recommender/
-├── data/
-│   ├── raw/
-│   └── processed/
-│       └── models/
+├── airflow/
+│   └── dags/
+├── aws/
+├── data/                  # Local data and model artifacts
 ├── docker/
 ├── sql/
 ├── src/
@@ -200,20 +233,30 @@ movie-recommender/
 │   ├── kafka/
 │   └── models/
 ├── tests/
+├── .env.example
+├── .gitignore
 ├── docker-compose.yml
 ├── requirements.txt
 └── README.md
 ```
 
+## Security Notes
+
+- Keep `.env` and all credentials out of version control.
+- Use least-privilege AWS IAM policies.
+- Configure unique secrets for local and deployed services.
+- Do not expose development credentials in production.
+- Keep datasets, trained artifacts, and generated deployment archives out of Git unless intentionally required.
+
 ## Future Improvements
 
-- Establish a leakage-free evaluation pipeline
-- Compare SVD, ALS, and Neural Collaborative Filtering using consistent metrics
-- Add recommendation quality metrics such as Precision@K and Recall@K
-- Improve API integration and automated test coverage
-- Add monitoring and performance benchmarks
-- Enhance the user interface and deployment documentation
+- Establish a leakage-free evaluation pipeline.
+- Compare SVD, ALS, and Neural CF on consistent test splits.
+- Add ranking metrics such as Precision@K and Recall@K.
+- Expand API integration and automated test coverage.
+- Add monitoring, logging, and performance benchmarks.
+- Document dataset acquisition, model training, and AWS deployment in detail.
 
 ## License
 
-Add a license file if you intend to distribute this project publicly.
+No license has been specified yet. Add a `LICENSE` file before allowing others to reuse, modify, or redistribute the project.
